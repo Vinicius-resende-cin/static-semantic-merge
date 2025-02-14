@@ -17,6 +17,7 @@ import soot.jimple.toolkits.callgraph.CallGraph;
 import soot.jimple.toolkits.callgraph.Edge;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 public class EntrypointManager {
 
@@ -35,19 +36,17 @@ public class EntrypointManager {
         this.modifiedMethodsHelper = new ModifiedMethodsHelper("diffj.jar", dependenciesPath);
     }
 
-    public List<ModifiedMethod> run(Project project,  MergeCommit mergeCommit, String className, String methodName){
-        Iterator<Edge> edges = getCallGraphFromMain(className, methodName);
-
-        Set<String> mutuallyModifiedFiles = this.modifiedLinesCollector.getFilesModifiedByBothParents(project, mergeCommit);
+    public List<ModifiedMethod> run(Project project,  MergeCommit mergeCommit){
+        Set<String> allModifiedFiles = this.modifiedLinesCollector.getAllModifiedFiles(project, mergeCommit);
 
         Set<ModifiedMethod> left = new HashSet<>();
         Set<ModifiedMethod> right = new HashSet<>();
-        for (String filePath : mutuallyModifiedFiles) {
+        for (String filePath : allModifiedFiles) {
              left.addAll(this.modifiedMethodsHelper.getAllModifiedMethods(project, filePath, mergeCommit.getAncestorSHA(), mergeCommit.getLeftSHA()));
              right.addAll(this.modifiedMethodsHelper.getAllModifiedMethods(project, filePath,  mergeCommit.getAncestorSHA(), mergeCommit.getRightSHA()));
         }
 
-       return findCommonAncestor(edges, left, right);
+       return findCommonAncestor(left, right);
     }
 
     public void configureSoot(String classpath, String classes) {
@@ -91,7 +90,6 @@ public class EntrypointManager {
      * Se left ou right tiverem mais de um elemento, buscar o ancestral comum mais recente para todas as combinações de pares.
      * Se nenhum acestral for encontrado, retonra uma exceção.
 
-     * @param edges         Iterador de arestas do grafo de chamadas.
      * @param leftChanges   Conjunto de métodos modificados no lado esquerdo.
      * @param rightChanges  Conjunto de métodos modificados no lado direito.
      * @return O ancestral comum mais recente ou null se nenhum for encontrado.
@@ -99,8 +97,8 @@ public class EntrypointManager {
      * @throws RuntimeException         Se nenhum ancestral comum for encontrado.
      */
 
-    public List<ModifiedMethod> findCommonAncestor(Iterator<Edge> edges, Set<ModifiedMethod> leftChanges, Set<ModifiedMethod> rightChanges) {
-        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = createDirectedGraph(edges);
+    public List<ModifiedMethod> findCommonAncestor(Set<ModifiedMethod> leftChanges, Set<ModifiedMethod> rightChanges) {
+        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = createDirectedGraph();
 
         if (leftChanges.isEmpty() || rightChanges.isEmpty()) {
             throw new IllegalArgumentException("leftChanges and rightChanges cannot be empty");
@@ -144,22 +142,72 @@ public class EntrypointManager {
 
         return null;
     }
-    public DefaultDirectedGraph<ModifiedMethod, DefaultEdge> createDirectedGraph(Iterator<Edge> edges) {
-        // Criar o grafo direcionado
-        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = new DefaultDirectedGraph<>(DefaultEdge.class);
 
-        // Adicionar os métodos e as arestas ao grafo
+    /**
+     * Método para simplificar a assinatura de um método, removendo o pacote de cada parâmetro e mantendo o nome simplificado da classe.
+     * @param signature Assinatura do método
+     * @return A assinatura simplificada.
+     */
+    private String simplifyMethodSignature(String signature) {
+        String args = signature.substring(signature.indexOf("(") + 1, signature.indexOf(")"));
+        if (args.equals("")) {
+            return signature;
+        }
+
+        String[] params = args.split(",");
+        String simplifiedParams = Arrays.stream(params)
+                .map(param -> {
+                    String[] parts = param.split("\\.");
+                    return parts[parts.length - 1];
+                })
+                .collect(Collectors.joining(", "));
+        return signature.substring(0, signature.indexOf("(")) + "(" + simplifiedParams + ")>";
+    }
+
+    /**
+     * Método recursivo para percorrer as arestas do CallGraph até uma profundidade determinada e convertê-las num DirectedGraph.
+     * @param graph     O DirectedGraph a ser preenchido.
+     * @param callGraph O CallGraph do Soot.
+     * @param edges     As arestas a serem percorridas.
+     * @param limit     O limite de profundidade da recursão.
+     */
+    private void traverseEdgeUntil(DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph, CallGraph callGraph, Iterator<Edge> edges, int limit) {
+        if (!edges.hasNext() || limit == 0) {
+            return;
+        }
+
         while (edges.hasNext()) {
             Edge edge = edges.next();
+            System.out.println(edge.getSrc() + " -> " + edge.getTgt());
+
             SootMethod src = (SootMethod) edge.getSrc();
             SootMethod tgt = (SootMethod) edge.getTgt();
 
-            ModifiedMethod sctModifiedMethod = new ModifiedMethod(src.getSignature());
-            ModifiedMethod tgtModifiedMethod = new ModifiedMethod(tgt.getSignature());
+            String srcSignature = simplifyMethodSignature(src.getSignature());
+            String tgtSignature = simplifyMethodSignature(tgt.getSignature());
+            ModifiedMethod sctModifiedMethod = new ModifiedMethod(srcSignature);
+            ModifiedMethod tgtModifiedMethod = new ModifiedMethod(tgtSignature);
+
             graph.addVertex(sctModifiedMethod);
             graph.addVertex(tgtModifiedMethod);
             graph.addEdge(sctModifiedMethod, tgtModifiedMethod);
+
+            this.traverseEdgeUntil(graph, callGraph, callGraph.edgesOutOf(edge.getTgt()), limit - 1);
         }
+    }
+
+    /**
+     * Método para criar um grafo direcionado a partir do CallGraph do Soot.
+     * @return O grafo direcionado.
+     */
+    public DefaultDirectedGraph<ModifiedMethod, DefaultEdge> createDirectedGraph() {
+        // Criar o grafo direcionado
+        CallGraph callGraph = Scene.v().getCallGraph();
+        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = new DefaultDirectedGraph<>(DefaultEdge.class);
+
+        // Adicionar os métodos e as arestas ao grafo
+        Iterator<Edge> edges = getCallGraphFromMain(this.mainClassName, this.mainMethodName);
+        traverseEdgeUntil(graph, callGraph, edges, 5);
 
         convertToDotGraph(graph);
 
