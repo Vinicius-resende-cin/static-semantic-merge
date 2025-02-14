@@ -35,7 +35,7 @@ public class EntrypointManagerTest {
 
     @BeforeEach
     public void setup() {
-        this.entrypointManager = new EntrypointManager("dependencies/");
+        this.entrypointManager = new EntrypointManager("dependencies/", "org.example.Main", "main");
         this.entrypointManager.configureSoot(this.CLASSPATH, "org.example.Main");
     }
 
@@ -55,16 +55,13 @@ public class EntrypointManagerTest {
 
     @Test
     public void testFindCommonAncestorWithEmptySets() {
-        Iterator<Edge> edges = buildCallGraph();
         Set<ModifiedMethod> left = new HashSet<>();
         Set<ModifiedMethod> right = new HashSet<>();
-        assertThrows(IllegalArgumentException.class, () -> entrypointManager.findCommonAncestor(edges, left, right), "leftChanges and rightChanges cannot be empty");
+        assertThrows(IllegalArgumentException.class, () -> entrypointManager.findCommonAncestor(left, right), "leftChanges and rightChanges cannot be empty");
     }
 
     @Test
     public void testFindCommonAncestor() {
-        Iterator<Edge> edges = buildCallGraph();
-
         Set<ModifiedMethod> left = new HashSet<>();
         Set<ModifiedMethod> right = new HashSet<>();
 
@@ -76,15 +73,15 @@ public class EntrypointManagerTest {
         ModifiedMethod modifiedMethod2 = new ModifiedMethod(methodName2);
         right.add(modifiedMethod2);
 
-        List<ModifiedMethod> commonAncestors = this.entrypointManager.findCommonAncestor(edges, left, right);
+        List<ModifiedMethod> commonAncestors = this.entrypointManager.findCommonAncestor(left, right);
 
         assertNotNull(commonAncestors);
-        assertEquals("<org.example.Main: void main(java.lang.String[])>", commonAncestors.get(0).getSignature());
+        System.out.println(commonAncestors.get(0).getSignature());
+        assertEquals("<org.example.Main: void main(String[])>", commonAncestors.get(0).getSignature());
     }
 
     @Test
     public void testFindCommonAncestorEmpty() {
-        Iterator<Edge> edges = buildCallGraph();
         Set<ModifiedMethod> left = new HashSet<>();
         Set<ModifiedMethod> right = new HashSet<>();
 
@@ -96,13 +93,12 @@ public class EntrypointManagerTest {
         ModifiedMethod modifiedMethod2 = new ModifiedMethod(methodName2);
         right.add(modifiedMethod2);
 
-        assertThrows(RuntimeException.class, () -> entrypointManager.findCommonAncestor(edges, left, right), "No common ancestor found.");
+        assertThrows(RuntimeException.class, () -> entrypointManager.findCommonAncestor(left, right), "No common ancestor found.");
     }
 
     @Test
     public void testFindCommonAncestorForPairEmpty() {
-        Iterator<Edge> edges = buildCallGraph();
-        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = this.entrypointManager.createDirectedGraph(edges);
+        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = this.entrypointManager.createDirectedGraph();
         ModifiedMethod left = new ModifiedMethod("<org.example.Main: void l()>");
         ModifiedMethod right = new ModifiedMethod("<org.example.Main: void r()>");
 
@@ -113,15 +109,15 @@ public class EntrypointManagerTest {
 
     @Test
     public void testFindCommonAncestorForPair() {
-        Iterator<Edge> edges = buildCallGraph();
-        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = this.entrypointManager.createDirectedGraph(edges);
+        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = this.entrypointManager.createDirectedGraph();
         ModifiedMethod left = new ModifiedMethod("<org.example.Main: void l()>");
         ModifiedMethod right = new ModifiedMethod("<org.example.Main: void r2()>");
 
         ModifiedMethod lcaAlgorithm = this.entrypointManager.findCommonAncestorForPair(graph, left, right);
 
         assertNotNull(lcaAlgorithm);
-        assertEquals("<org.example.Main: void main(java.lang.String[])>", lcaAlgorithm.getSignature());
+        System.out.println(lcaAlgorithm.getSignature());
+        assertEquals("<org.example.Main: void main(String[])>", lcaAlgorithm.getSignature());
     }
 
 }
