@@ -24,7 +24,13 @@ public class EntrypointManager {
 
     ModifiedMethodsHelper modifiedMethodsHelper;
 
-    public EntrypointManager (String dependenciesPath) {
+    String mainClassName;
+
+    String mainMethodName;
+
+    public EntrypointManager (String dependenciesPath, String mainClassName, String mainMethodName) {
+        this.mainClassName = mainClassName;
+        this.mainMethodName = mainMethodName;
         this.modifiedLinesCollector = new ModifiedLinesCollector(dependenciesPath);
         this.modifiedMethodsHelper = new ModifiedMethodsHelper("diffj.jar", dependenciesPath);
     }

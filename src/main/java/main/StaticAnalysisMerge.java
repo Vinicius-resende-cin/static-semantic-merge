@@ -33,7 +33,7 @@ public class StaticAnalysisMerge {
         CommitManager commitManager = new CommitManager(this.args.getHead(), this.args.getParents(), this.args.getBase());
         Project project = new Project("project", this.args.getTargetProjectRoot());
         ModifiedLinesManager modifiedLinesManager = new ModifiedLinesManager(this.args.getSsmDependenciesPath());
-        EntrypointManager entrypointManager = new EntrypointManager(this.args.getSsmDependenciesPath());
+        EntrypointManager entrypointManager = new EntrypointManager(this.args.getSsmDependenciesPath(), this.args.getClassName(), this.args.getMainMethod());
 
         try {
             //dependenciesManager.copyAuxFilesToProject(this.args.getSsmPath());
@@ -61,7 +61,7 @@ public class StaticAnalysisMerge {
                 }
             } else {
                 entrypointManager.configureSoot(dest.getPath(), this.args.getClassName());
-                entrypoints = entrypointManager.run(project, mergeCommit, this.args.getClassName(), this.args.getMainMethod());
+                entrypoints = entrypointManager.run(project, mergeCommit);
             }
 
             List<CollectedMergeMethodData> collectedMergeMethodDataList = modifiedLinesManager.collectData(project, mergeCommit);
