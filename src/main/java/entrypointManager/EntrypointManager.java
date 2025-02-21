@@ -98,7 +98,11 @@ public class EntrypointManager {
      */
 
     public List<ModifiedMethod> findCommonAncestor(Set<ModifiedMethod> leftChanges, Set<ModifiedMethod> rightChanges) {
-        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = createDirectedGraph();
+        // Cria um mapa <signatureSimplificada, ModifiedMethod> para mapear os métodos
+        Map<String, ModifiedMethod> signatureMap = new HashMap<>();
+
+        // Cria um grafo direcionado com as chamadas dos métodos
+        DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = createDirectedGraph(signatureMap);
 
         if (leftChanges.isEmpty() || rightChanges.isEmpty()) {
             throw new IllegalArgumentException("leftChanges and rightChanges cannot be empty");
@@ -108,7 +112,7 @@ public class EntrypointManager {
 
         for (ModifiedMethod leftMethod : leftChanges) {
             for (ModifiedMethod rightMethod : rightChanges) {
-                ModifiedMethod ancestorsForPair = findCommonAncestorForPair(graph, leftMethod, rightMethod);
+                ModifiedMethod ancestorsForPair = findCommonAncestorForPair(graph, leftMethod, rightMethod, signatureMap);
                 if(ancestorsForPair != null){
                     commonAncestors.add(ancestorsForPair);
                 }
@@ -131,13 +135,14 @@ public class EntrypointManager {
      * @return O ancestral comum mais recente ou null se nenhum for encontrado.
      */
 
-    public ModifiedMethod findCommonAncestorForPair(DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph, ModifiedMethod leftMethod, ModifiedMethod rightMethod) {
+    public ModifiedMethod findCommonAncestorForPair(DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph, ModifiedMethod leftMethod, ModifiedMethod rightMethod,
+                                                    Map<String, ModifiedMethod> signatureMap) {
 
 
         LowestCommonAncestorAlgorithm<ModifiedMethod> lcaAlgorithm = new NaiveLCAFinder<>(graph);
 
        if(graph.containsVertex(leftMethod) && graph.containsVertex(rightMethod)){
-           return lcaAlgorithm.getLCA(leftMethod, rightMethod);
+           return signatureMap.get(lcaAlgorithm.getLCA(leftMethod, rightMethod).getSignature());
         }
 
         return null;
@@ -171,7 +176,8 @@ public class EntrypointManager {
      * @param edges     As arestas a serem percorridas.
      * @param limit     O limite de profundidade da recursão.
      */
-    private void traverseEdgeUntil(DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph, CallGraph callGraph, Iterator<Edge> edges, int limit) {
+    private void traverseEdgeUntil(DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph, CallGraph callGraph, Iterator<Edge> edges, Map<String,
+            ModifiedMethod> signatureMap, int limit) {
         if (!edges.hasNext() || limit == 0) {
             return;
         }
@@ -185,6 +191,9 @@ public class EntrypointManager {
 
             String srcSignature = simplifyMethodSignature(src.getSignature());
             String tgtSignature = simplifyMethodSignature(tgt.getSignature());
+            signatureMap.put(srcSignature, new ModifiedMethod(src.getSignature()));
+            signatureMap.put(tgtSignature, new ModifiedMethod(tgt.getSignature()));
+
             ModifiedMethod sctModifiedMethod = new ModifiedMethod(srcSignature);
             ModifiedMethod tgtModifiedMethod = new ModifiedMethod(tgtSignature);
 
@@ -192,7 +201,7 @@ public class EntrypointManager {
             graph.addVertex(tgtModifiedMethod);
             graph.addEdge(sctModifiedMethod, tgtModifiedMethod);
 
-            this.traverseEdgeUntil(graph, callGraph, callGraph.edgesOutOf(edge.getTgt()), limit - 1);
+            this.traverseEdgeUntil(graph, callGraph, callGraph.edgesOutOf(edge.getTgt()), signatureMap, limit - 1);
         }
     }
 
@@ -200,14 +209,14 @@ public class EntrypointManager {
      * Método para criar um grafo direcionado a partir do CallGraph do Soot.
      * @return O grafo direcionado.
      */
-    public DefaultDirectedGraph<ModifiedMethod, DefaultEdge> createDirectedGraph() {
-        // Criar o grafo direcionado
+    public DefaultDirectedGraph<ModifiedMethod, DefaultEdge> createDirectedGraph(Map<String, ModifiedMethod> signatureMap) {
+        // Criar o grafo direcionado com signatures simplificadas
         CallGraph callGraph = Scene.v().getCallGraph();
         DefaultDirectedGraph<ModifiedMethod, DefaultEdge> graph = new DefaultDirectedGraph<>(DefaultEdge.class);
 
         // Adicionar os métodos e as arestas ao grafo
         Iterator<Edge> edges = getCallGraphFromMain(this.mainClassName, this.mainMethodName);
-        traverseEdgeUntil(graph, callGraph, edges, 5);
+        traverseEdgeUntil(graph, callGraph, edges, signatureMap, 5);
 
         convertToDotGraph(graph);
 
