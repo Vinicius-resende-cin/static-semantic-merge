@@ -3,10 +3,7 @@ package main;
 import buildManager.BuildGenerator;
 import csvManager.CsvManager;
 import entrypointManager.EntrypointManager;
-import gitManager.CollectedMergeMethodData;
-import gitManager.CommitManager;
-import gitManager.MergeManager;
-import gitManager.ModifiedLinesManager;
+import gitManager.*;
 import org.apache.commons.io.FileUtils;
 import project.MergeCommit;
 import project.Project;
@@ -122,6 +119,11 @@ public class StaticAnalysisMerge {
                 }
                 fw.close();
             }
+
+            // Exporting the diff
+            String outputDiffFile = "files/" + project.getName() + "/" + mergeCommit.getSHA() + "/diffs/diff.txt";
+            DiffManager diffManager = new DiffManager(this.args.getTargetProjectRoot(), outputDiffFile);
+            diffManager.exportDiff(mergeCommit.getLeftSHA(), mergeCommit.getRightSHA());
 
             RunSootAnalysisOutputProcessor runSootAnalysisOutputProcessor = new RunSootAnalysisOutputProcessor(this.args.getSsmDependenciesPath());
             runSootAnalysisOutputProcessor.executeAnalyses(".");
